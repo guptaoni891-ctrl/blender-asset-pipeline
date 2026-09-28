@@ -4,8 +4,10 @@ Blender Asset Pipeline is an installable Blender add-on for validating game-read
 mesh assets and applying a small set of explicitly selected, previewed repairs.
 Validation remains read-only. Fixing is a separate opt-in workflow with risk labels,
 confirmation, stale-plan protection, undo integration, and automatic revalidation.
+Scene-wide batch validation produces deterministic schema-versioned JSON for
+artists, technical artists, and future automation.
 
-Version: **0.2.1**
+Version: **0.3.0**
 
 ## Current features
 
@@ -22,6 +24,12 @@ Version: **0.2.1**
 - Classify every result as `PASS`, `WARNING`, or `ERROR`.
 - Show a summary and detailed results in the sidebar and write a complete report to
   Blender's system console.
+- Batch validate the current scene or every scene in the blend file.
+- Deduplicate objects shared by multiple scenes while preserving sorted scene
+  memberships in the report.
+- Summarize object outcomes, check severities, and aggregate mesh geometry.
+- Export the exact latest batch result as deterministic, UTF-8 JSON using report
+  schema version `1.0` and an atomic file replacement.
 - Generate a fix plan without modifying assets, grouped by object in the sidebar.
 - Select fixes individually, select all `SAFE` fixes, or deselect the entire plan.
 - Normalize names with the configured convention and collision-safe suffixes.
@@ -40,7 +48,7 @@ Version: **0.2.1**
    entire repository). From the repository root, for example:
 
    ```powershell
-   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.2.1.zip
+   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.3.0.zip
    ```
 
 3. In Blender, open **Edit > Preferences > Add-ons**, choose **Install...**, select
@@ -63,6 +71,69 @@ Python add-on packaging format.
 5. Configure the triangle limit, naming convention, optional prefix, and transform
    tolerance in **Edit > Preferences > Add-ons > Asset Pipeline: Game Asset
    Validator & Fixer**.
+
+### Batch validation and JSON reports
+
+The **Batch Validation** subpanel provides two read-only scopes:
+
+- **Validate Current Scene** discovers every object in the active scene.
+- **Validate All Scenes** discovers objects across all scenes and validates a
+  shared Blender object only once. Its complete sorted scene-membership list is
+  retained.
+
+The sidebar shows discovered, validated, and skipped counts; clean, warning-only,
+and error-object counts; check totals; aggregate vertices, polygons, and triangles;
+the largest mesh; and a capped attention list. A concise bounded summary is also
+printed to the system console. Unsupported object types remain visible as skipped
+results, matching individual validation behavior.
+
+After a batch run, choose **Export JSON Report...**. The exporter saves the exact
+in-memory report represented by the displayed summary, appends `.json` when
+needed, writes UTF-8 with a final newline, and atomically replaces the destination.
+Temporary batch UI properties are not stored in `.blend` files. Unsaved files are
+supported and are represented by `"is_saved": false` and a null source path.
+
+The public report schema is versioned independently from the add-on. Version `1.0`
+has this top-level shape:
+
+```json
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-28T12:00:00Z",
+  "generator": {
+    "tool_name": "Blender Asset Pipeline",
+    "addon_version": "0.3.0",
+    "blender_version": "5.2.2 LTS"
+  },
+  "source": {
+    "blend_filepath": null,
+    "is_saved": false
+  },
+  "policy": {
+    "max_triangle_count": 100000,
+    "naming_convention": "LOWER_SNAKE_CASE",
+    "required_prefix": "",
+    "transform_tolerance": 0.0001
+  },
+  "scope": {
+    "type": "ALL_SCENES",
+    "scenes": ["Main", "Secondary"]
+  },
+  "summary": {
+    "objects": {},
+    "checks": {},
+    "geometry": {}
+  },
+  "objects": []
+}
+```
+
+Each object record includes its name, type, sorted scene memberships,
+validated/skipped state, `CLEAN`/`WARNING`/`ERROR`/`SKIPPED` status, check summary,
+geometry and transform snapshots where applicable, and ordered validation checks.
+Check severities remain `PASS`, `WARNING`, and `ERROR`. Internal Blender pointers
+and deduplication keys are never part of the schema. This stable representation is
+suitable for CI consumers and a future headless CLI, but no CLI is included yet.
 
 ### Preview-first fixer workflow
 
@@ -135,17 +206,20 @@ blender_asset_pipeline/
 |-- models/                 Typed snapshots, configuration, and results
 |-- validation/             Blender-independent rules and report formatting
 |-- fixing/                 Pure planning/models plus guarded Blender execution
-|-- operators/              Validation, planning, selection, and apply commands
-|-- ui/                     Sidebar panels and transient validation/fix state
+|-- batch/                  Collection models, pure aggregation, console summary
+|-- reporting/              Schema-v1 JSON, atomic writer, latest-run cache
+|-- operators/              Validation, batch, report, and explicit-fix commands
+|-- ui/                     Sidebar panels and transient validation/fix/batch state
 `-- utils/                  Blender-to-core data adapters
 tests/                      Pure-Python tests and a separate Blender smoke test
 ```
 
-Adapters take read-only snapshots of Blender data. Validation and fix planning
-consume dataclasses, while the execution module contains the Blender mutations.
-This keeps policy testable without `bpy` and makes the safety boundary explicit.
-Validation and fix-plan UI state use `SKIP_SAVE` so recent reports and previews are
-not unnecessarily persisted into `.blend` files.
+Adapters take read-only snapshots of Blender data. Individual and batch validation,
+fix planning, JSON serialization, and report writing consume dataclasses without
+depending on `bpy`; only collection, operators, UI, and explicit fix execution use
+Blender APIs. Batch discovery scans each included scene once, deduplicates by
+object identity internally, and validates each unique snapshot once. Validation,
+fix-plan, and batch UI state use `SKIP_SAVE`.
 
 ## Development
 
@@ -172,22 +246,25 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 ## Roadmap
 
 - [x] Preview-first automatic asset fixer with explicit opt-in (Milestone 2)
-- Batch validation across scenes and project folders
+- [x] Current-scene and all-scenes batch validation (Milestone 3)
+- [x] Machine-readable JSON reports, schema version 1.0 (Milestone 3)
+- Folder/project scanning
 - Batch import/export
 - LOD generation
 - Collision generation
 - Texture and material optimization
 - Thumbnail rendering
-- JSON and HTML reports
+- HTML reports
 - Headless CLI processing
 - Expanded CI/testing across supported Blender versions
 
 ## Development status
 
-Milestone 2 is hardened at version 0.2.1. Validation, pure fix planning, transient
-UI state, and Blender-specific execution remain separate. The automatic scope is
-intentionally conservative; unsupported repairs stay visible as manual actions
-rather than being guessed at.
+Milestone 3 is complete at version 0.3.0. Batch validation is read-only and limited
+to objects already present in the current blend file. It does not scan folders,
+import external assets, fix objects in bulk, provide a headless CLI, or generate
+HTML. Active/selected validation and the conservative preview-first fixer remain
+available and unchanged in scope.
 
 ## License
 

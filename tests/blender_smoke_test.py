@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 import bpy
@@ -19,6 +21,7 @@ preferences_module = importlib.import_module("blender_asset_pipeline.preferences
 state_module = importlib.import_module("blender_asset_pipeline.ui.state")
 fix_state_module = importlib.import_module("blender_asset_pipeline.ui.fix_state")
 planner_module = importlib.import_module("blender_asset_pipeline.fixing.planner")
+batch_state_module = importlib.import_module("blender_asset_pipeline.ui.batch_state")
 
 addon_package_id = constants_module.ADDON_PACKAGE_ID
 preferences_type = preferences_module.BAP_AddonPreferences
@@ -27,6 +30,8 @@ state_type = state_module.BAP_PG_validation_state
 target_type = state_module.BAP_PG_validation_target
 fix_action_type = fix_state_module.BAP_PG_fix_action
 fix_state_type = fix_state_module.BAP_PG_fix_state
+batch_attention_type = batch_state_module.BAP_PG_batch_attention
+batch_state_type = batch_state_module.BAP_PG_batch_state
 
 assert addon_package_id == "blender_asset_pipeline"
 assert addon_package_id == preferences_module.__package__
@@ -37,6 +42,8 @@ scene_state_property = bpy.types.Scene.bl_rna.properties["bap_validation_state"]
 assert scene_state_property.is_skip_save
 scene_fix_property = bpy.types.Scene.bl_rna.properties["bap_fix_state"]
 assert scene_fix_property.is_skip_save
+scene_batch_property = bpy.types.Scene.bl_rna.properties["bap_batch_state"]
+assert scene_batch_property.is_skip_save
 for property_name in (
     "has_run",
     "show_details",
@@ -74,6 +81,32 @@ for property_name in (
     "target",
 ):
     assert fix_action_type.bl_rna.properties[property_name].is_skip_save
+for property_name in (
+    "has_run",
+    "run_id",
+    "scope",
+    "scene_names",
+    "objects_discovered",
+    "objects_validated",
+    "objects_skipped",
+    "checks_passed",
+    "checks_warning",
+    "checks_error",
+    "clean_objects",
+    "warning_objects",
+    "error_objects",
+    "total_vertices",
+    "total_polygons",
+    "total_triangles",
+    "largest_object_name",
+    "largest_triangle_count",
+    "average_triangle_count",
+    "attention_object_count",
+    "attention_objects",
+):
+    assert batch_state_type.bl_rna.properties[property_name].is_skip_save
+for property_name in ("object_name", "warning_count", "error_count"):
+    assert batch_attention_type.bl_rna.properties[property_name].is_skip_save
 
 cube = bpy.context.active_object
 assert cube is not None and cube.type == "MESH"
@@ -216,7 +249,100 @@ result = bpy.ops.bap.validate_active()
 assert result == {"FINISHED"}, result
 assert bpy.context.scene.bap_validation_state.error_count == 0
 
+# Batch validation remains read-only and deduplicates shared objects by identity.
+main_scene = bpy.context.scene
+valid_mesh = mesh.copy()
+valid_mesh.name = "batch_valid_mesh"
+valid_object = bpy.data.objects.new("batch_valid", valid_mesh)
+main_scene.collection.objects.link(valid_object)
+
+invalid_mesh = mesh.copy()
+invalid_mesh.name = "batch_invalid_mesh"
+invalid_object = bpy.data.objects.new("Bad Batch Asset", invalid_mesh)
+invalid_object.scale = (2.0, 1.0, 1.0)
+main_scene.collection.objects.link(invalid_object)
+
+unsupported_object = bpy.data.objects.new("batch_empty", None)
+main_scene.collection.objects.link(unsupported_object)
+
+second_scene = bpy.data.scenes.new("Batch Second")
+second_scene.collection.objects.link(invalid_object)
+second_mesh = mesh.copy()
+second_mesh.name = "second_asset_mesh"
+second_object = bpy.data.objects.new("second_asset", second_mesh)
+second_scene.collection.objects.link(second_object)
+
+main_scale_before = tuple(invalid_object.scale)
+result = bpy.ops.bap.batch_validate_current_scene()
+assert result == {"FINISHED"}, result
+batch_state = main_scene.bap_batch_state
+current_unique = {obj.as_pointer() for obj in main_scene.objects}
+assert batch_state.has_run
+assert batch_state.scope == "CURRENT_SCENE"
+assert batch_state.objects_discovered == len(current_unique)
+assert batch_state.objects_validated == sum(
+    obj.type == "MESH" for obj in main_scene.objects
+)
+assert batch_state.objects_skipped == sum(
+    obj.type != "MESH" for obj in main_scene.objects
+)
+assert tuple(invalid_object.scale) == main_scale_before
+
+result = bpy.ops.bap.batch_validate_all_scenes()
+assert result == {"FINISHED"}, result
+batch_state = main_scene.bap_batch_state
+all_unique = {
+    obj.as_pointer()
+    for scene in bpy.data.scenes
+    for obj in scene.objects
+}
+assert batch_state.scope == "ALL_SCENES"
+assert batch_state.objects_discovered == len(all_unique)
+assert batch_state.objects_validated == sum(
+    obj.type == "MESH" for obj in bpy.data.objects if obj.as_pointer() in all_unique
+)
+assert batch_state.objects_skipped == sum(
+    obj.type != "MESH" for obj in bpy.data.objects if obj.as_pointer() in all_unique
+)
+assert batch_state.error_objects >= 1
+assert len(batch_state.attention_objects) >= 1
+assert tuple(invalid_object.scale) == main_scale_before
+
+with tempfile.TemporaryDirectory() as temporary_directory:
+    requested_path = Path(temporary_directory) / "batch-smoke-report"
+    result = bpy.ops.bap.export_batch_json(filepath=str(requested_path))
+    assert result == {"FINISHED"}, result
+    report_path = requested_path.with_name(requested_path.name + ".json")
+    report_text = report_path.read_text(encoding="utf-8")
+    report_json = json.loads(report_text)
+
+assert report_text.endswith("\n")
+assert report_json["schema_version"] == "1.0"
+assert report_json["scope"]["type"] == "ALL_SCENES"
+assert not report_json["source"]["is_saved"]
+assert report_json["source"]["blend_filepath"] is None
+assert len(report_json["objects"]) == len(all_unique)
+assert sum(
+    item["name"] == invalid_object.name for item in report_json["objects"]
+) == 1
+invalid_json = next(
+    item for item in report_json["objects"] if item["name"] == invalid_object.name
+)
+assert invalid_json["scene_memberships"] == ["Batch Second", main_scene.name]
+assert any(
+    check["check_id"] == "scale" and check["severity"] == "ERROR"
+    for check in invalid_json["checks"]
+)
+unsupported_json = next(
+    item
+    for item in report_json["objects"]
+    if item["name"] == unsupported_object.name
+)
+assert unsupported_json["state"] == "SKIPPED"
+assert str(invalid_object.as_pointer()) not in report_text
+
 bpy.ops.preferences.addon_disable(module="blender_asset_pipeline")
 assert not hasattr(bpy.types.Scene, "bap_validation_state")
 assert not hasattr(bpy.types.Scene, "bap_fix_state")
+assert not hasattr(bpy.types.Scene, "bap_batch_state")
 print("Blender Asset Pipeline smoke test passed")
