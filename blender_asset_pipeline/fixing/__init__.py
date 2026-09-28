@@ -12,6 +12,7 @@ from .models import (
     FixTargetSnapshot,
 )
 from .planner import (
+    SCALE_NEAR_ZERO_EPSILON,
     collision_safe_name,
     fingerprint_target,
     normalize_object_name,
@@ -28,6 +29,7 @@ __all__ = [
     "FixPlan",
     "FixRisk",
     "FixTargetSnapshot",
+    "SCALE_NEAR_ZERO_EPSILON",
     "collision_safe_name",
     "fingerprint_target",
     "normalize_object_name",

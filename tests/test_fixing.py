@@ -6,6 +6,8 @@ import unittest
 from dataclasses import replace
 
 from blender_asset_pipeline.fixing import (
+    SCALE_NEAR_ZERO_EPSILON,
+    FixAction,
     FixKind,
     FixRisk,
     FixTargetSnapshot,
@@ -106,6 +108,94 @@ class NamingFixTests(unittest.TestCase):
 
 class FixPlannerTests(unittest.TestCase):
     """Exercise action support, risk, defaults, and stale fingerprints."""
+
+    def _scale_action(self, scale: tuple[float, float, float]) -> FixAction:
+        target = FixTargetSnapshot(
+            "object-1",
+            fixable_asset(scale=scale),
+        )
+        return next(
+            action
+            for action in plan_for(target).actions
+            if action.kind is FixKind.APPLY_SCALE
+        )
+
+    def test_positive_scale_is_safe_and_selected_by_default(self) -> None:
+        action = self._scale_action((2.0, 1.0, 1.0))
+
+        self.assertTrue(action.supported)
+        self.assertEqual(action.risk, FixRisk.SAFE)
+        self.assertTrue(action.selected)
+        self.assertTrue(action.default_selected)
+
+    def test_negative_scale_is_caution_and_not_selected(self) -> None:
+        action = self._scale_action((-1.0, 1.0, 1.0))
+
+        self.assertTrue(action.supported)
+        self.assertEqual(action.risk, FixRisk.CAUTION)
+        self.assertFalse(action.selected)
+        self.assertFalse(action.default_selected)
+        self.assertIn("mirrored/negative", action.description)
+        self.assertIn("bakes the mirrored transform", action.description)
+
+    def test_multiple_negative_scale_components_remain_caution(self) -> None:
+        action = self._scale_action((-1.0, -2.0, 1.0))
+
+        self.assertTrue(action.supported)
+        self.assertEqual(action.risk, FixRisk.CAUTION)
+        self.assertFalse(action.selected)
+
+    def test_zero_scale_is_unsupported(self) -> None:
+        action = self._scale_action((0.0, 1.0, 1.0))
+
+        self.assertFalse(action.supported)
+        self.assertFalse(action.selected)
+        self.assertIn("degenerate or collapsed geometry", action.description)
+        self.assertIn("cannot be applied automatically", action.unsupported_reason)
+
+    def test_near_zero_scale_is_unsupported(self) -> None:
+        action = self._scale_action(
+            (SCALE_NEAR_ZERO_EPSILON / 2.0, 1.0, 1.0)
+        )
+
+        self.assertFalse(action.supported)
+        self.assertFalse(action.selected)
+        self.assertIn("near-zero", action.unsupported_reason)
+
+    def test_location_and_rotation_planning_remains_caution(self) -> None:
+        target = FixTargetSnapshot(
+            "object-1",
+            fixable_asset(
+                location=(1.0, 0.0, 0.0),
+                rotation=(0.0, 0.25, 0.0),
+            ),
+        )
+        actions = {action.kind: action for action in plan_for(target).actions}
+
+        for kind in (FixKind.APPLY_LOCATION, FixKind.APPLY_ROTATION):
+            self.assertTrue(actions[kind].supported)
+            self.assertEqual(actions[kind].risk, FixRisk.CAUTION)
+            self.assertFalse(actions[kind].selected)
+
+    def test_non_finite_transforms_are_unsupported(self) -> None:
+        target = FixTargetSnapshot(
+            "object-1",
+            fixable_asset(
+                location=(float("inf"), 0.0, 0.0),
+                rotation=(0.0, float("nan"), 0.0),
+                scale=(float("inf"), 1.0, 1.0),
+            ),
+        )
+        actions = {action.kind: action for action in plan_for(target).actions}
+
+        for kind in (
+            FixKind.APPLY_LOCATION,
+            FixKind.APPLY_ROTATION,
+            FixKind.APPLY_SCALE,
+        ):
+            self.assertFalse(actions[kind].supported)
+            self.assertFalse(actions[kind].selected)
+            self.assertIn("non-finite", actions[kind].unsupported_reason)
 
     def test_safe_and_caution_actions_have_correct_defaults(self) -> None:
         slots = (

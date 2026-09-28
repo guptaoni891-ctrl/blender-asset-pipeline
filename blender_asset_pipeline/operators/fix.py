@@ -36,10 +36,12 @@ class BAP_OT_generate_fix_plan(bpy.types.Operator):
         config = get_preferences(context).to_validation_config()
         validation_state = context.scene.bap_validation_state
         pairs = []
+        fresh_objects = []
+        fresh_reports = []
         missing_actions = []
         objects_by_key = {}
 
-        for reference in validation_state.targets:
+        for reference in list(validation_state.targets):
             obj = reference.target
             if obj is None:
                 missing_actions.append(
@@ -49,6 +51,8 @@ class BAP_OT_generate_fix_plan(bpy.types.Operator):
             target = snapshot_fix_target(obj)
             report = validate_asset(target.asset, config)
             pairs.append((target, report))
+            fresh_objects.append(obj)
+            fresh_reports.append(report)
             objects_by_key[target.object_key] = obj
 
         plan = plan_fixes(
@@ -58,6 +62,7 @@ class BAP_OT_generate_fix_plan(bpy.types.Operator):
         )
         if missing_actions:
             plan = FixPlan((*plan.actions, *missing_actions))
+        store_reports(validation_state, fresh_reports, fresh_objects)
         store_fix_plan(context.scene.bap_fix_state, plan, objects_by_key)
 
         supported = sum(action.supported for action in plan.actions)

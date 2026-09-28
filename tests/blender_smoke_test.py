@@ -18,6 +18,7 @@ constants_module = importlib.import_module("blender_asset_pipeline.constants")
 preferences_module = importlib.import_module("blender_asset_pipeline.preferences")
 state_module = importlib.import_module("blender_asset_pipeline.ui.state")
 fix_state_module = importlib.import_module("blender_asset_pipeline.ui.fix_state")
+planner_module = importlib.import_module("blender_asset_pipeline.fixing.planner")
 
 addon_package_id = constants_module.ADDON_PACKAGE_ID
 preferences_type = preferences_module.BAP_AddonPreferences
@@ -150,6 +151,47 @@ result = bpy.ops.bap.apply_selected_fixes("EXEC_DEFAULT")
 assert result == {"FINISHED"}, result
 assert len(cube.material_slots) == 1
 assert all(polygon.material_index == 0 for polygon in mesh.polygons)
+assert bpy.context.scene.bap_validation_state.error_count == 0
+
+# Generate Fix Plan must refresh validation from the same snapshot it plans.
+# A negative scale introduced after the clean validation is cautious and opt-in.
+cube.scale = (-1.0, 1.0, 1.0)
+assert bpy.context.scene.bap_validation_state.error_count == 0
+result = bpy.ops.bap.generate_fix_plan()
+assert result == {"FINISHED"}, result
+assert bpy.context.scene.bap_validation_state.error_count > 0
+negative_scale_action = next(
+    action
+    for action in bpy.context.scene.bap_fix_state.actions
+    if action.kind == "APPLY_SCALE"
+)
+assert negative_scale_action.supported
+assert negative_scale_action.risk == "CAUTION"
+assert not negative_scale_action.selected
+assert "mirrored/negative" in negative_scale_action.description
+assert not bpy.ops.bap.apply_selected_fixes.poll()
+
+# Zero and near-zero scales remain previewable but can never be auto-applied.
+for unsafe_scale in (
+    (0.0, 1.0, 1.0),
+    (planner_module.SCALE_NEAR_ZERO_EPSILON / 2.0, 1.0, 1.0),
+):
+    cube.scale = unsafe_scale
+    result = bpy.ops.bap.generate_fix_plan()
+    assert result == {"FINISHED"}, result
+    unsafe_scale_action = next(
+        action
+        for action in bpy.context.scene.bap_fix_state.actions
+        if action.kind == "APPLY_SCALE"
+    )
+    assert not unsafe_scale_action.supported
+    assert not unsafe_scale_action.selected
+    assert "degenerate or collapsed geometry" in unsafe_scale_action.description
+    assert not bpy.ops.bap.apply_selected_fixes.poll()
+
+cube.scale = (1.0, 1.0, 1.0)
+result = bpy.ops.bap.validate_active()
+assert result == {"FINISHED"}, result
 assert bpy.context.scene.bap_validation_state.error_count == 0
 
 # A material state change after preview must stale the whole object plan.

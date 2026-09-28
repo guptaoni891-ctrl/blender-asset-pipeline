@@ -5,7 +5,7 @@ mesh assets and applying a small set of explicitly selected, previewed repairs.
 Validation remains read-only. Fixing is a separate opt-in workflow with risk labels,
 confirmation, stale-plan protection, undo integration, and automatic revalidation.
 
-Version: **0.2.0**
+Version: **0.2.1**
 
 ## Current features
 
@@ -40,7 +40,7 @@ Version: **0.2.0**
    entire repository). From the repository root, for example:
 
    ```powershell
-   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.2.0.zip
+   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.2.1.zip
    ```
 
 3. In Blender, open **Edit > Preferences > Add-ons**, choose **Install...**, select
@@ -88,7 +88,9 @@ apply operation, and running validation again also clears the old plan.
   required prefix. Collisions use predictable pipeline-safe suffixes such as
   `_002`, rather than relying on Blender's `.001` suffix.
 - Independent application of location, rotation, or scale through Blender's
-  transform application behavior.
+  transform application behavior. Positive, finite, non-near-zero scale is
+  `SAFE`; mirrored/negative scale is `CAUTION` and opt-in; zero, near-zero, and
+  non-finite scale is never applied automatically.
 - Removal of empty material slots when no polygons use those slots.
 - Consolidation of slots that reference the exact same material datablock, with
   explicit polygon-index remapping.
@@ -182,7 +184,7 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 
 ## Development status
 
-Milestone 2 is complete at version 0.2.0. Validation, pure fix planning, transient
+Milestone 2 is hardened at version 0.2.1. Validation, pure fix planning, transient
 UI state, and Blender-specific execution remain separate. The automatic scope is
 intentionally conservative; unsupported repairs stay visible as manual actions
 rather than being guessed at.

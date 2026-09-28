@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, replace
@@ -28,6 +29,11 @@ from .models import (
 _WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _NON_ALPHANUMERIC = re.compile(r"[^A-Za-z0-9]+")
 _BLENDER_NUMERIC_SUFFIX = re.compile(r"\.\d{3}$")
+
+# Applying scale at or below this magnitude can collapse mesh coordinates. This
+# is intentionally independent of the user-facing validation tolerance because
+# it is an execution safety boundary rather than a validation policy setting.
+SCALE_NEAR_ZERO_EPSILON = 1.0e-6
 
 
 def _name_words(value: str) -> list[str]:
@@ -160,6 +166,22 @@ def _transform_blocker(target: FixTargetSnapshot, transform: str) -> str:
     return ""
 
 
+def _combined_blocker(*reasons: str) -> str:
+    return " ".join(reason for reason in reasons if reason)
+
+
+def _non_finite_transform_blocker(
+    transform_name: str,
+    values: tuple[float, float, float],
+) -> str:
+    if all(math.isfinite(value) for value in values):
+        return ""
+    return (
+        f"The object's {transform_name.lower()} contains non-finite values and "
+        "cannot be applied automatically."
+    )
+
+
 def _material_blocker(target: FixTargetSnapshot) -> str:
     blocker = _mesh_mutation_blocker(target)
     if blocker:
@@ -262,25 +284,71 @@ def _plan_transforms(
             FixRisk.CAUTION,
             "Bake the current rotation into the mesh while preserving appearance.",
         ),
-        (
-            "scale",
-            FixKind.APPLY_SCALE,
-            "Apply Scale",
-            FixRisk.SAFE,
-            "Bake the current scale into the mesh while preserving appearance.",
-        ),
     )
     actions = []
     for check_id, kind, title, risk, description in specifications:
         if results.get(check_id) is not Severity.ERROR:
             continue
-        blocker = _transform_blocker(target, check_id.upper())
+        values = getattr(target.asset, check_id)
+        blocker = _combined_blocker(
+            _transform_blocker(target, check_id.upper()),
+            _non_finite_transform_blocker(check_id, values),
+        )
         actions.append(
             _action(
                 target,
                 kind,
                 FixCategory.TRANSFORM,
                 title,
+                description,
+                risk,
+                not blocker,
+                blocker,
+            )
+        )
+
+    if results.get("scale") is Severity.ERROR:
+        scale = target.asset.scale
+        blocker = _transform_blocker(target, "SCALE")
+        non_finite_blocker = _non_finite_transform_blocker("scale", scale)
+
+        if non_finite_blocker:
+            description = (
+                "Scale contains non-finite values and cannot be safely baked into "
+                "mesh data."
+            )
+            risk = FixRisk.CAUTION
+            blocker = _combined_blocker(blocker, non_finite_blocker)
+        elif any(abs(component) <= SCALE_NEAR_ZERO_EPSILON for component in scale):
+            description = (
+                "Applying a zero or near-zero scale could bake degenerate or "
+                "collapsed geometry into the mesh."
+            )
+            risk = FixRisk.CAUTION
+            blocker = _combined_blocker(
+                blocker,
+                "Zero or near-zero scale cannot be applied automatically because "
+                "it could bake degenerate or collapsed geometry into the mesh.",
+            )
+        elif any(component < 0.0 for component in scale):
+            description = (
+                "This mirrored/negative scale requires review because applying it "
+                "bakes the mirrored transform into mesh data."
+            )
+            risk = FixRisk.CAUTION
+        else:
+            description = (
+                "Bake the current positive scale into the mesh while preserving "
+                "appearance."
+            )
+            risk = FixRisk.SAFE
+
+        actions.append(
+            _action(
+                target,
+                FixKind.APPLY_SCALE,
+                FixCategory.TRANSFORM,
+                "Apply Scale",
                 description,
                 risk,
                 not blocker,
