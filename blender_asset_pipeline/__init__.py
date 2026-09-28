@@ -1,12 +1,12 @@
 """Blender Asset Pipeline add-on entry point."""
 
 bl_info = {
-    "name": "Asset Pipeline: Game Asset Validator",
+    "name": "Asset Pipeline: Game Asset Validator & Fixer",
     "author": "Blender Asset Pipeline contributors",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Asset Pipeline",
-    "description": "Validate game-ready mesh assets without modifying them",
+    "description": "Validate assets and preview explicitly selected safe fixes",
     "category": "Object",
 }
 

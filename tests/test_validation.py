@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 import blender_asset_pipeline
-from blender_asset_pipeline.constants import ADDON_PACKAGE_ID
+from blender_asset_pipeline.constants import ADDON_PACKAGE_ID, ADDON_VERSION
 from blender_asset_pipeline.models import (
     AssetSnapshot,
     MaterialSlotSnapshot,
@@ -49,6 +49,10 @@ class ValidationTests(unittest.TestCase):
 
     def test_addon_identifier_uses_package_identity(self) -> None:
         self.assertEqual(ADDON_PACKAGE_ID, blender_asset_pipeline.__name__)
+
+    def test_version_metadata_is_consistent(self) -> None:
+        self.assertEqual(ADDON_VERSION, (0, 2, 0))
+        self.assertEqual(blender_asset_pipeline.bl_info["version"], ADDON_VERSION)
 
     def test_conforming_asset_passes_every_check(self) -> None:
         report = validate_asset(valid_asset(), ValidationConfig())

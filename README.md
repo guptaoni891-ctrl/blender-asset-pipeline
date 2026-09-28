@@ -1,11 +1,11 @@
 # Blender Asset Pipeline
 
-Blender Asset Pipeline is an installable Blender add-on for checking whether mesh
-assets are ready to enter a game-content pipeline. Milestone 1 is deliberately
-validation-only: it reports problems but never changes an object, mesh, material,
-image, or scene setting.
+Blender Asset Pipeline is an installable Blender add-on for validating game-ready
+mesh assets and applying a small set of explicitly selected, previewed repairs.
+Validation remains read-only. Fixing is a separate opt-in workflow with risk labels,
+confirmation, stale-plan protection, undo integration, and automatic revalidation.
 
-Version: **0.1.0**
+Version: **0.2.0**
 
 ## Current features
 
@@ -22,6 +22,16 @@ Version: **0.1.0**
 - Classify every result as `PASS`, `WARNING`, or `ERROR`.
 - Show a summary and detailed results in the sidebar and write a complete report to
   Blender's system console.
+- Generate a fix plan without modifying assets, grouped by object in the sidebar.
+- Select fixes individually, select all `SAFE` fixes, or deselect the entire plan.
+- Normalize names with the configured convention and collision-safe suffixes.
+- Apply location, rotation, and scale independently where object state is safe.
+- Remove unused empty material slots and consolidate exact duplicate datablocks
+  while preserving polygon material assignments.
+- Reject stale plans when relevant object, transform, material, or geometry state
+  changes after preview.
+- Apply selected fixes as one Blender undo operation and immediately revalidate the
+  affected objects.
 
 ## Installation
 
@@ -30,11 +40,11 @@ Version: **0.1.0**
    entire repository). From the repository root, for example:
 
    ```powershell
-   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.1.0.zip
+   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.2.0.zip
    ```
 
 3. In Blender, open **Edit > Preferences > Add-ons**, choose **Install...**, select
-   the ZIP, and enable **Asset Pipeline: Game Asset Validator**.
+   the ZIP, and enable **Asset Pipeline: Game Asset Validator & Fixer**.
 
 For development, place or symlink `blender_asset_pipeline/` in Blender's add-ons
 directory, then enable the add-on.
@@ -52,11 +62,65 @@ Python add-on packaging format.
    terminal used to launch Blender on macOS/Linux).
 5. Configure the triangle limit, naming convention, optional prefix, and transform
    tolerance in **Edit > Preferences > Add-ons > Asset Pipeline: Game Asset
-   Validator**.
+   Validator & Fixer**.
 
-Validation is read-only. Applying transforms, renaming assets, creating UVs, and
-repairing material or texture references remain explicit user actions in this
-milestone.
+### Preview-first fixer workflow
+
+The fixer never runs as part of validation and there is no immediate "fix
+everything" command:
+
+1. Validate the active object or selected objects.
+2. Expand **Fix Preview** and choose **Generate Fix Plan**.
+3. Review every proposed action, explanation, risk, and unsupported reason.
+4. Keep the default `SAFE` selections, use **Select All Safe**, or explicitly opt
+   into individual `CAUTION` actions.
+5. Choose **Apply Selected Fixes** and review the confirmation summary.
+6. Confirm the operation. Blender applies the selected fixes as an undoable action.
+7. Review the automatic validation results and the `FIX REPORT` plus `VALIDATION
+   AFTER FIXES` output in the system console.
+
+Generating or clearing a plan never changes an asset. A plan is discarded after an
+apply operation, and running validation again also clears the old plan.
+
+### Supported automatic fixes
+
+- Naming normalization for `lower_snake_case`, `UpperCamelCase`, and an optional
+  required prefix. Collisions use predictable pipeline-safe suffixes such as
+  `_002`, rather than relying on Blender's `.001` suffix.
+- Independent application of location, rotation, or scale through Blender's
+  transform application behavior.
+- Removal of empty material slots when no polygons use those slots.
+- Consolidation of slots that reference the exact same material datablock, with
+  explicit polygon-index remapping.
+
+Automatic mutation is refused for linked data, library overrides, shared mesh
+datablocks, unsafe object hierarchies, constraints, modifiers, animation, shape
+keys, delta transforms, locked channels, object-linked material slots, and other
+states where the result could affect more than the previewed asset.
+
+### Manual and unsupported fixes
+
+The preview explains these issues but does not attempt to repair them:
+
+- Missing image files or image texture nodes without an assigned image
+- Missing UV maps
+- Empty mesh geometry
+- Triangle-budget violations, decimation, or other mesh optimization
+- Missing material assignment or optimization beyond exact duplicate slots
+- LOD and collision generation
+
+### Risk, undo, and stale plans
+
+- `SAFE` actions are supported and selected by default.
+- `CAUTION` actions require the user to select them explicitly.
+- `DESTRUCTIVE` is reserved for high-risk future operations and is never selected
+  automatically.
+
+**Apply Selected Fixes** presents object and risk counts before execution and uses
+Blender's `REGISTER`/`UNDO` integration. Selection, active object, and mode are
+restored where practical. Each plan stores a fingerprint of relevant state; a
+renamed, transformed, materially changed, or deleted object is reported as stale
+instead of receiving an outdated fix.
 
 ## Architecture
 
@@ -68,15 +132,18 @@ blender_asset_pipeline/
 |-- registration.py         Ordered Blender class/property lifecycle
 |-- models/                 Typed snapshots, configuration, and results
 |-- validation/             Blender-independent rules and report formatting
-|-- operators/              Active/selection validation commands
-|-- ui/                     Sidebar panel and transient result state
+|-- fixing/                 Pure planning/models plus guarded Blender execution
+|-- operators/              Validation, planning, selection, and apply commands
+|-- ui/                     Sidebar panels and transient validation/fix state
 `-- utils/                  Blender-to-core data adapters
-tests/                      Pure-Python unit tests
+tests/                      Pure-Python tests and a separate Blender smoke test
 ```
 
-The adapter takes a read-only snapshot of Blender data. Validation consumes only
-dataclasses, which keeps policy separate from `bpy` and makes the core usable in
-future headless and automated workflows.
+Adapters take read-only snapshots of Blender data. Validation and fix planning
+consume dataclasses, while the execution module contains the Blender mutations.
+This keeps policy testable without `bpy` and makes the safety boundary explicit.
+Validation and fix-plan UI state use `SKIP_SAVE` so recent reports and previews are
+not unnecessarily persisted into `.blend` files.
 
 ## Development
 
@@ -102,7 +169,7 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 
 ## Roadmap
 
-- Automatic asset fixer (explicit opt-in; not part of Milestone 1)
+- [x] Preview-first automatic asset fixer with explicit opt-in (Milestone 2)
 - Batch validation across scenes and project folders
 - Batch import/export
 - LOD generation
@@ -115,9 +182,10 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 
 ## Development status
 
-Milestone 1 is complete at version 0.1.0. The public validation model and Blender
-adapter are intentionally separated so later milestones can add fixers and batch
-processing without coupling those features to the sidebar UI.
+Milestone 2 is complete at version 0.2.0. Validation, pure fix planning, transient
+UI state, and Blender-specific execution remain separate. The automatic scope is
+intentionally conservative; unsupported repairs stay visible as manual actions
+rather than being guessed at.
 
 ## License
 

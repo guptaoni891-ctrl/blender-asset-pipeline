@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import bpy
 
 from ..preferences import get_preferences
+from ..ui.fix_state import clear_fix_plan
 from ..ui.state import store_reports
 from ..utils.blender_adapter import snapshot_object
 from ..validation import format_reports, validate_asset
@@ -24,7 +25,8 @@ def _run_validation(
 
     config = get_preferences(context).to_validation_config()
     reports = [validate_asset(snapshot_object(obj), config) for obj in objects]
-    store_reports(context.scene.bap_validation_state, reports)
+    store_reports(context.scene.bap_validation_state, reports, list(objects))
+    clear_fix_plan(context.scene.bap_fix_state)
     print(format_reports(reports))
 
     errors = sum(report.summary.errors for report in reports)

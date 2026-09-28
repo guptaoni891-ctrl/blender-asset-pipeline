@@ -1,7 +1,13 @@
 """Transient Blender UI state for the most recent validation run."""
 
 import bpy
-from bpy.props import BoolProperty, CollectionProperty, IntProperty, StringProperty
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    IntProperty,
+    PointerProperty,
+    StringProperty,
+)
 
 from ..models import ObjectValidationReport
 from ..validation.reporting import summarize_reports
@@ -16,6 +22,14 @@ class BAP_PG_validation_result(bpy.types.PropertyGroup):
     check_name: StringProperty(options=_TRANSIENT_OPTIONS)
     severity: StringProperty(options=_TRANSIENT_OPTIONS)
     message: StringProperty(options=_TRANSIENT_OPTIONS)
+
+
+class BAP_PG_validation_target(bpy.types.PropertyGroup):
+    """Transient reference to an object included in the latest validation."""
+
+    object_key: StringProperty(options=_TRANSIENT_OPTIONS)
+    object_name: StringProperty(options=_TRANSIENT_OPTIONS)
+    target: PointerProperty(type=bpy.types.Object, options=_TRANSIENT_OPTIONS)
 
 
 class BAP_PG_validation_state(bpy.types.PropertyGroup):
@@ -37,15 +51,21 @@ class BAP_PG_validation_state(bpy.types.PropertyGroup):
         type=BAP_PG_validation_result,
         options=_TRANSIENT_OPTIONS,
     )
+    targets: CollectionProperty(
+        type=BAP_PG_validation_target,
+        options=_TRANSIENT_OPTIONS,
+    )
 
 
 def store_reports(
     state: BAP_PG_validation_state,
     reports: list[ObjectValidationReport],
+    objects: list[bpy.types.Object] | None = None,
 ) -> None:
     """Replace sidebar state with a completed validation run."""
     summary = summarize_reports(reports)
     state.results.clear()
+    state.targets.clear()
     state.has_run = True
     state.object_count = len(reports)
     state.validated_count = sum(report.was_validated for report in reports)
@@ -61,3 +81,9 @@ def store_reports(
             item.check_name = result.check_name
             item.severity = result.severity.name
             item.message = result.message
+
+    for obj in objects or []:
+        target = state.targets.add()
+        target.object_key = str(obj.as_pointer())
+        target.object_name = obj.name
+        target.target = obj

@@ -5,21 +5,42 @@ from __future__ import annotations
 import bpy
 from bpy.props import PointerProperty
 
-from .operators import BAP_OT_validate_active, BAP_OT_validate_selected
+from .operators import (
+    BAP_OT_apply_selected_fixes,
+    BAP_OT_clear_fix_plan,
+    BAP_OT_deselect_all_fixes,
+    BAP_OT_generate_fix_plan,
+    BAP_OT_select_all_safe_fixes,
+    BAP_OT_validate_active,
+    BAP_OT_validate_selected,
+)
 from .preferences import BAP_AddonPreferences
 from .ui import (
+    BAP_PG_fix_action,
+    BAP_PG_fix_state,
     BAP_PG_validation_result,
     BAP_PG_validation_state,
+    BAP_PG_validation_target,
+    BAP_PT_fix_panel,
     BAP_PT_validation_panel,
 )
 
 _CLASSES = (
     BAP_AddonPreferences,
     BAP_PG_validation_result,
+    BAP_PG_validation_target,
     BAP_PG_validation_state,
+    BAP_PG_fix_action,
+    BAP_PG_fix_state,
     BAP_OT_validate_active,
     BAP_OT_validate_selected,
+    BAP_OT_generate_fix_plan,
+    BAP_OT_select_all_safe_fixes,
+    BAP_OT_deselect_all_fixes,
+    BAP_OT_apply_selected_fixes,
+    BAP_OT_clear_fix_plan,
     BAP_PT_validation_panel,
+    BAP_PT_fix_panel,
 )
 
 
@@ -31,10 +52,16 @@ def register_addon() -> None:
         type=BAP_PG_validation_state,
         options={"SKIP_SAVE"},
     )
+    bpy.types.Scene.bap_fix_state = PointerProperty(
+        type=BAP_PG_fix_state,
+        options={"SKIP_SAVE"},
+    )
 
 
 def unregister_addon() -> None:
     """Remove scene state and unregister classes in reverse order."""
+    if hasattr(bpy.types.Scene, "bap_fix_state"):
+        del bpy.types.Scene.bap_fix_state
     if hasattr(bpy.types.Scene, "bap_validation_state"):
         del bpy.types.Scene.bap_validation_state
     for cls in reversed(_CLASSES):
