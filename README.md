@@ -83,11 +83,18 @@ future headless and automated workflows.
 Run the core test suite from the repository root:
 
 ```bash
-python -m unittest discover -s tests -v
 python -m compileall -q blender_asset_pipeline tests
+ruff check .
+python -m unittest discover -s tests -v
 ```
 
-A Blender smoke test can be run when Blender is installed:
+GitHub Actions runs these Blender-independent checks with Python 3.10 on every
+push and pull request. This matches the Python generation used by Blender 3.6 LTS,
+the add-on's minimum supported Blender release.
+
+A Blender smoke test remains separate from the normal CI job because standard
+GitHub-hosted runners do not include Blender. Run it locally when Blender is
+installed:
 
 ```bash
 blender --background --factory-startup --python tests/blender_smoke_test.py

@@ -3,14 +3,14 @@
 import bpy
 from bpy.props import EnumProperty, FloatProperty, IntProperty, StringProperty
 
-from .constants import ADDON_ID
+from .constants import ADDON_PACKAGE_ID
 from .models import NamingConvention, ValidationConfig
 
 
 class BAP_AddonPreferences(bpy.types.AddonPreferences):
     """Persistent settings controlling validation policy."""
 
-    bl_idname = ADDON_ID
+    bl_idname = ADDON_PACKAGE_ID
 
     max_triangle_count: IntProperty(
         name="Maximum Triangles",
@@ -77,7 +77,9 @@ class BAP_AddonPreferences(bpy.types.AddonPreferences):
 
 def get_preferences(context: bpy.types.Context) -> BAP_AddonPreferences:
     """Return this add-on's preferences or raise a clear configuration error."""
-    addon = context.preferences.addons.get(ADDON_ID)
+    addon = context.preferences.addons.get(ADDON_PACKAGE_ID)
     if addon is None:
-        raise RuntimeError(f"Add-on preferences for '{ADDON_ID}' are unavailable")
+        raise RuntimeError(
+            f"Add-on preferences for '{ADDON_PACKAGE_ID}' are unavailable"
+        )
     return addon.preferences

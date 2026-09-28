@@ -27,7 +27,10 @@ def register_addon() -> None:
     """Register classes and scene state in dependency order."""
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
-    bpy.types.Scene.bap_validation_state = PointerProperty(type=BAP_PG_validation_state)
+    bpy.types.Scene.bap_validation_state = PointerProperty(
+        type=BAP_PG_validation_state,
+        options={"SKIP_SAVE"},
+    )
 
 
 def unregister_addon() -> None:

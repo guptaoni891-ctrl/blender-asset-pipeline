@@ -41,7 +41,7 @@ def _vector_near(
 ) -> bool:
     return all(
         abs(value - target) <= tolerance
-        for value, target in zip(actual, expected)
+        for value, target in zip(actual, expected, strict=True)
     )
 
 

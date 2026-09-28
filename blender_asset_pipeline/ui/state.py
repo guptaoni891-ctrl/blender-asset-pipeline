@@ -6,28 +6,37 @@ from bpy.props import BoolProperty, CollectionProperty, IntProperty, StringPrope
 from ..models import ObjectValidationReport
 from ..validation.reporting import summarize_reports
 
+_TRANSIENT_OPTIONS = {"SKIP_SAVE"}
+
 
 class BAP_PG_validation_result(bpy.types.PropertyGroup):
     """One validation result rendered in the sidebar."""
 
-    object_name: StringProperty()
-    check_name: StringProperty()
-    severity: StringProperty()
-    message: StringProperty()
+    object_name: StringProperty(options=_TRANSIENT_OPTIONS)
+    check_name: StringProperty(options=_TRANSIENT_OPTIONS)
+    severity: StringProperty(options=_TRANSIENT_OPTIONS)
+    message: StringProperty(options=_TRANSIENT_OPTIONS)
 
 
 class BAP_PG_validation_state(bpy.types.PropertyGroup):
     """Summary and result collection for the latest run."""
 
-    has_run: BoolProperty(default=False)
-    show_details: BoolProperty(name="Show Details", default=True)
-    object_count: IntProperty(default=0)
-    validated_count: IntProperty(default=0)
-    skipped_count: IntProperty(default=0)
-    passed_count: IntProperty(default=0)
-    warning_count: IntProperty(default=0)
-    error_count: IntProperty(default=0)
-    results: CollectionProperty(type=BAP_PG_validation_result)
+    has_run: BoolProperty(default=False, options=_TRANSIENT_OPTIONS)
+    show_details: BoolProperty(
+        name="Show Details",
+        default=True,
+        options=_TRANSIENT_OPTIONS,
+    )
+    object_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    validated_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    skipped_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    passed_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    warning_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    error_count: IntProperty(default=0, options=_TRANSIENT_OPTIONS)
+    results: CollectionProperty(
+        type=BAP_PG_validation_result,
+        options=_TRANSIENT_OPTIONS,
+    )
 
 
 def store_reports(
