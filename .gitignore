@@ -1,0 +1,13 @@
+.idea/
+.vscode/
+*.blend1
+*.blend2
+*.py[cod]
+*.zip
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+htmlcov/
+.coverage

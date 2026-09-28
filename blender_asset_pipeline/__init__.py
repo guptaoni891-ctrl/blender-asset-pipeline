@@ -1,0 +1,25 @@
+"""Blender Asset Pipeline add-on entry point."""
+
+bl_info = {
+    "name": "Asset Pipeline: Game Asset Validator",
+    "author": "Blender Asset Pipeline contributors",
+    "version": (0, 1, 0),
+    "blender": (3, 6, 0),
+    "location": "View3D > Sidebar > Asset Pipeline",
+    "description": "Validate game-ready mesh assets without modifying them",
+    "category": "Object",
+}
+
+
+def register() -> None:
+    """Register add-on classes and Blender properties."""
+    from .registration import register_addon
+
+    register_addon()
+
+
+def unregister() -> None:
+    """Unregister add-on classes and Blender properties."""
+    from .registration import unregister_addon
+
+    unregister_addon()
