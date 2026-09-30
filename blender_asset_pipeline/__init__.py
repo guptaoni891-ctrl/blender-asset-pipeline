@@ -3,7 +3,7 @@
 bl_info = {
     "name": "Asset Pipeline: Game Asset Validator & Fixer",
     "author": "Blender Asset Pipeline contributors",
-    "version": (0, 3, 0),
+    "version": (0, 3, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Asset Pipeline",
     "description": "Validate assets, export JSON reports, and preview safe fixes",

@@ -7,7 +7,7 @@ confirmation, stale-plan protection, undo integration, and automatic revalidatio
 Scene-wide batch validation produces deterministic schema-versioned JSON for
 artists, technical artists, and future automation.
 
-Version: **0.3.0**
+Version: **0.3.1**
 
 ## Current features
 
@@ -48,7 +48,7 @@ Version: **0.3.0**
    entire repository). From the repository root, for example:
 
    ```powershell
-   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.3.0.zip
+   Compress-Archive -Path blender_asset_pipeline -DestinationPath blender_asset_pipeline-0.3.1.zip
    ```
 
 3. In Blender, open **Edit > Preferences > Add-ons**, choose **Install...**, select
@@ -92,6 +92,7 @@ in-memory report represented by the displayed summary, appends `.json` when
 needed, writes UTF-8 with a final newline, and atomically replaces the destination.
 Temporary batch UI properties are not stored in `.blend` files. Unsaved files are
 supported and are represented by `"is_saved": false` and a null source path.
+Transient batch report data is discarded when changing Blender files or projects.
 
 The public report schema is versioned independently from the add-on. Version `1.0`
 has this top-level shape:
@@ -102,7 +103,7 @@ has this top-level shape:
   "generated_at_utc": "2026-09-28T12:00:00Z",
   "generator": {
     "tool_name": "Blender Asset Pipeline",
-    "addon_version": "0.3.0",
+    "addon_version": "0.3.1",
     "blender_version": "5.2.2 LTS"
   },
   "source": {
@@ -260,7 +261,7 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 
 ## Development status
 
-Milestone 3 is complete at version 0.3.0. Batch validation is read-only and limited
+Milestone 3 is hardened at version 0.3.1. Batch validation is read-only and limited
 to objects already present in the current blend file. It does not scan folders,
 import external assets, fix objects in bulk, provide a headless CLI, or generate
 HTML. Active/selected validation and the conservative preview-first fixer remain

@@ -51,7 +51,7 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(ADDON_PACKAGE_ID, blender_asset_pipeline.__name__)
 
     def test_version_metadata_is_consistent(self) -> None:
-        self.assertEqual(ADDON_VERSION, (0, 3, 0))
+        self.assertEqual(ADDON_VERSION, (0, 3, 1))
         self.assertEqual(blender_asset_pipeline.bl_info["version"], ADDON_VERSION)
 
     def test_conforming_asset_passes_every_check(self) -> None:

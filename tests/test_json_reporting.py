@@ -74,7 +74,7 @@ def build_report(name: str = "café_crate") -> BatchValidationReport:
 
 GENERATOR = ReportGenerator(
     "Blender Asset Pipeline",
-    "0.3.0",
+    "0.3.1",
     "5.2.2 LTS",
 )
 

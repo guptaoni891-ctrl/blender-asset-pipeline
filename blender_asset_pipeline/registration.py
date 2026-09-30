@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.props import PointerProperty
 
+from .lifecycle import register_load_handlers, unregister_load_handlers
 from .operators import (
     BAP_OT_apply_selected_fixes,
     BAP_OT_batch_validate_all_scenes,
@@ -72,12 +73,14 @@ def register_addon() -> None:
         type=BAP_PG_batch_state,
         options={"SKIP_SAVE"},
     )
+    register_load_handlers()
 
 
 def unregister_addon() -> None:
     """Remove scene state and unregister classes in reverse order."""
     from .reporting.runtime import clear_latest_batch_run
 
+    unregister_load_handlers()
     clear_latest_batch_run()
     if hasattr(bpy.types.Scene, "bap_batch_state"):
         del bpy.types.Scene.bap_batch_state

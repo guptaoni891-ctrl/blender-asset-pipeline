@@ -6,6 +6,8 @@ import importlib
 import json
 import sys
 import tempfile
+from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
 import bpy
@@ -22,6 +24,29 @@ state_module = importlib.import_module("blender_asset_pipeline.ui.state")
 fix_state_module = importlib.import_module("blender_asset_pipeline.ui.fix_state")
 planner_module = importlib.import_module("blender_asset_pipeline.fixing.planner")
 batch_state_module = importlib.import_module("blender_asset_pipeline.ui.batch_state")
+lifecycle_module = importlib.import_module("blender_asset_pipeline.lifecycle")
+runtime_module = importlib.import_module(
+    "blender_asset_pipeline.reporting.runtime"
+)
+
+
+def transient_handler_count(handlers: Iterable[object]) -> int:
+    """Count load handlers owned by this add-on."""
+    return sum(
+        getattr(handler, "_bap_lifecycle_handler", None)
+        == lifecycle_module.TRANSIENT_LOAD_HANDLER_ID
+        for handler in handlers
+    )
+
+
+assert transient_handler_count(bpy.app.handlers.load_pre) == 1
+assert transient_handler_count(bpy.app.handlers.load_post) == 1
+assert transient_handler_count(bpy.app.handlers.load_factory_startup_post) == 1
+lifecycle_module.register_load_handlers()
+lifecycle_module.register_load_handlers()
+assert transient_handler_count(bpy.app.handlers.load_pre) == 1
+assert transient_handler_count(bpy.app.handlers.load_post) == 1
+assert transient_handler_count(bpy.app.handlers.load_factory_startup_post) == 1
 
 addon_package_id = constants_module.ADDON_PACKAGE_ID
 preferences_type = preferences_module.BAP_AddonPreferences
@@ -341,8 +366,33 @@ unsupported_json = next(
 assert unsupported_json["state"] == "SKIPPED"
 assert str(invalid_object.as_pointer()) not in report_text
 
+# The persistent load callback clears only the in-memory report cache and does
+# not need an active editor context or an actual destructive file-load operation.
+cached_run = runtime_module.get_latest_batch_run(batch_state.run_id)
+assert cached_run is not None
+fake_run = replace(cached_run, run_id="smoke-fake-run")
+runtime_module.set_latest_batch_run(fake_run)
+assert runtime_module.get_latest_batch_run("smoke-fake-run") is fake_run
+assert not bpy.ops.bap.export_batch_json.poll()
+lifecycle_module.clear_transient_state_on_load(None)
+assert runtime_module.get_latest_batch_run("smoke-fake-run") is None
+assert not bpy.ops.bap.export_batch_json.poll()
+
 bpy.ops.preferences.addon_disable(module="blender_asset_pipeline")
 assert not hasattr(bpy.types.Scene, "bap_validation_state")
 assert not hasattr(bpy.types.Scene, "bap_fix_state")
 assert not hasattr(bpy.types.Scene, "bap_batch_state")
+assert transient_handler_count(bpy.app.handlers.load_pre) == 0
+assert transient_handler_count(bpy.app.handlers.load_post) == 0
+assert transient_handler_count(bpy.app.handlers.load_factory_startup_post) == 0
+
+# A complete re-enable cycle also installs only one handler per phase.
+bpy.ops.preferences.addon_enable(module="blender_asset_pipeline")
+assert transient_handler_count(bpy.app.handlers.load_pre) == 1
+assert transient_handler_count(bpy.app.handlers.load_post) == 1
+assert transient_handler_count(bpy.app.handlers.load_factory_startup_post) == 1
+bpy.ops.preferences.addon_disable(module="blender_asset_pipeline")
+assert transient_handler_count(bpy.app.handlers.load_pre) == 0
+assert transient_handler_count(bpy.app.handlers.load_post) == 0
+assert transient_handler_count(bpy.app.handlers.load_factory_startup_post) == 0
 print("Blender Asset Pipeline smoke test passed")
